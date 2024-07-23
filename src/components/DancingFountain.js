@@ -1,83 +1,88 @@
 import React, { useEffect, useRef, useMemo } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
-import { OrbitControls, Cylinder } from '@react-three/drei'
+import { OrbitControls, Cylinder, SpotLight } from '@react-three/drei'
 import * as THREE from 'three'
 import Ground from './Ground'  // Import Ground component
+import GardenElements from './GardenElements'  // Import the new component
 
 // Vertex shader for water particles
 const vertexShader = `
   attribute float size;
   attribute vec3 velocity;
+  attribute float offset;
   uniform float time;
-  varying float vLifespan;
+  varying float vOpacity;
 
   void main() {
-    // Calculate new position based on velocity and time
-    vec3 pos = position + velocity * time;
-    pos.y -= 2.0 * time * time; // Apply gravity effect
-    
+    vec3 pos = position + velocity * (time + offset);
+    pos.y -= 2.0 * (time + offset) * (time + offset);
+
+    pos.x += sin(time * 2.0 + offset) * 0.1;
+    pos.z += cos(time * 2.0 + offset) * 0.1;
+
     vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-    // Adjust point size based on distance from camera
     gl_PointSize = size * (300.0 / -mvPosition.z);
     gl_Position = projectionMatrix * mvPosition;
-    vLifespan = 1.0 - (time / 2.0); // Calculate lifespan (2 seconds total)
+
+    float lifetime = 2.0;
+    vOpacity = 1.0 - (time + offset) / lifetime;
+    vOpacity = clamp(vOpacity, 0.0, 1.0);
   }
 `
 
 // Fragment shader for water particles
 const fragmentShader = `
   uniform vec3 color;
-  varying float vLifespan;
+  varying float vOpacity;
 
   void main() {
-    if (vLifespan <= 0.0) discard; // Discard particles that have exceeded their lifespan
-    gl_FragColor = vec4(color, vLifespan);
+    vec2 center = gl_PointCoord - 0.5;
+    float dist = length(center);
+    float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
+
+    gl_FragColor = vec4(color, alpha);
   }
 `
 
-const PARTICLE_COUNT = 5000
+const PARTICLE_COUNT = 15000
 
 // Component for creating water particles
 const WaterParticles = ({ position }) => {
-  // Create particle attributes
-  const [positions, velocities, sizes] = useMemo(() => {
+  const [positions, velocities, sizes, offsets] = useMemo(() => {
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const velocities = new Float32Array(PARTICLE_COUNT * 3)
     const sizes = new Float32Array(PARTICLE_COUNT)
+    const offsets = new Float32Array(PARTICLE_COUNT)
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const i3 = i * 3
-      // Set random initial positions
-      positions[i3] = (Math.random() - 0.5) * 0.5
-      positions[i3 + 1] = 0
-      positions[i3 + 2] = (Math.random() - 0.5) * 0.5
-
-      // Set random velocities
+      const radius = Math.random() * 0.5
       const angle = Math.random() * Math.PI * 2
-      const speed = 2 + Math.random() * 2
-      velocities[i3] = Math.cos(angle) * speed * 0.2
-      velocities[i3 + 1] = 3 + Math.random() * 2 // Initial upward velocity
-      velocities[i3 + 2] = Math.sin(angle) * speed * 0.2
+      positions[i3] = Math.cos(angle) * radius
+      positions[i3 + 1] = 0
+      positions[i3 + 2] = Math.sin(angle) * radius
 
-      // Set random sizes
+      const velocity = 2 + Math.random() * 2
+      velocities[i3] = (Math.random() - 0.5) * 0.5
+      velocities[i3 + 1] = velocity
+      velocities[i3 + 2] = (Math.random() - 0.5) * 0.5
+
       sizes[i] = 0.1 + Math.random() * 0.3
+      offsets[i] = Math.random() * 2
     }
 
-    return [positions, velocities, sizes]
+    return [positions, velocities, sizes, offsets]
   }, [])
 
   const particles = useRef()
-  // Create uniforms for shader
   const uniforms = useMemo(() => ({
     time: { value: 0 },
     color: { value: new THREE.Color(0x00aaff) }
   }), [])
 
-  // Update particle system on each frame
   useFrame((state) => {
     const { clock } = state
-    uniforms.time.value = clock.getElapsedTime() % 2 // Reset every 2 seconds
-    particles.current.material.uniforms.time.value = uniforms.time.value
+    uniforms.time.value = clock.getElapsedTime() % 2
   })
 
   return (
@@ -101,6 +106,12 @@ const WaterParticles = ({ position }) => {
           array={sizes}
           itemSize={1}
         />
+        <bufferAttribute
+          attach="attributes-offset"
+          count={PARTICLE_COUNT}
+          array={offsets}
+          itemSize={1}
+        />
       </bufferGeometry>
       <shaderMaterial
         vertexShader={vertexShader}
@@ -108,49 +119,86 @@ const WaterParticles = ({ position }) => {
         uniforms={uniforms}
         transparent
         depthWrite={false}
+        blending={THREE.AdditiveBlending}
       />
     </points>
   )
 }
 
-// Component for creating a fountain
+// Component สำหรับสร้างน้ำพุ
 const Fountain = ({ position }) => {
-  return (
-    <group position={position}>
-      <Cylinder args={[1, 1, 0.5, 32]} position={[0, 0.25, 0]}>
-        <meshStandardMaterial color="gray" />
-      </Cylinder>
-      <WaterParticles position={[0, 0.5, 0]} />
-    </group>
-  )
-}
-
-// Main component for the realistic fountains scene
+    return (
+      <group position={position}>
+        {/* ทรงกระบอกที่เป็นฐานน้ำพุ */}
+        <Cylinder 
+          args={[1, 1, 0.5, 32]} 
+          position={[0, 0.25, 0]}
+          castShadow  // เพิ่มการสร้างเงา
+          receiveShadow  // เพิ่มการรับเงา
+        >
+          <meshStandardMaterial color="gray" />
+        </Cylinder>
+        <WaterParticles position={[0, 0.5, 0]} />
+      </group>
+    )
+  }
+  
+ 
+// Component หลักสำหรับฉาก Dancing Fountain
 export default function RealisticFountains() {
-  console.log('Rendering RealisticFountains')
-  
-  const { scene, camera } = useThree()
-  
-  useEffect(() => {
-    console.log('Scene:', scene)
-    console.log('Camera:', camera)
+    const { scene, camera, gl } = useThree()
     
-    // Set sky color
-    scene.background = new THREE.Color(0x87CEEB)
-    
-    // Set initial camera position and look at center
-    camera.position.set(0, 5, 10)
-    camera.lookAt(0, 0, 0)
-  }, [scene, camera])
-
-  return (
-    <>
-      <OrbitControls />
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} />
-      <Ground />
-      <Fountain position={[0, 0, 0]} />
-      <axesHelper args={[5]} />
-    </>
-  )
-}
+    useEffect(() => {
+      // ตั้งค่าสีพื้นหลังของฉาก
+      scene.background = new THREE.Color(0x87CEEB)
+      
+      // ตั้งค่าตำแหน่งกล้องเริ่มต้น
+      camera.position.set(0, 5, 10)
+      camera.lookAt(0, 0, 0)
+  
+      // เปิดใช้งานเงาสำหรับ renderer
+      gl.shadowMap.enabled = true
+      gl.shadowMap.type = THREE.PCFSoftShadowMap  // ใช้ soft shadow map เพื่อให้เงานุ่มนวลขึ้น
+  
+      // ตั้งค่าให้ทุก object ในฉากสามารถสร้างและรับเงาได้
+      scene.traverse((object) => {
+        if (object.isMesh) {
+          object.castShadow = true
+          object.receiveShadow = true
+        }
+      })
+    }, [scene, camera, gl])
+  
+    return (
+      <>
+        <OrbitControls />
+  
+        {/* แสงแวดล้อมทั่วไป ให้แสงสว่างกับทุกวัตถุในฉาก */}
+        <ambientLight intensity={0.3} />
+  
+        {/* แสงหลักจากด้านบน */}
+        <directionalLight
+          position={[5, 10, 5]}
+          intensity={0.5}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+        />
+  
+        {/* SpotLight เพื่อเน้นแสงที่น้ำพุ */}
+        <SpotLight
+          position={[0, 10, 0]}
+          angle={Math.PI / 6}
+          penumbra={0.2}
+          intensity={1}
+          castShadow
+          shadow-mapSize={[1024, 1024]}
+          color="#ffffff"
+        />
+  
+        <Ground />
+        <Fountain position={[0, 0, 0]} />
+        <GardenElements />
+      </>
+    )
+  }

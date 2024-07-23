@@ -4,51 +4,61 @@ import { OrbitControls, Cylinder, SpotLight } from '@react-three/drei'
 import * as THREE from 'three'
 import Ground from './Ground'  // Import Ground component
 import GardenElements from './GardenElements'  // Import the new component
+import { EffectComposer, Bloom, DepthOfField } from '@react-three/postprocessing'
 
 // Vertex shader for water particles
 const vertexShader = `
-    attribute float size;
-    attribute vec3 velocity;
-    attribute float offset;
     uniform float time;
     uniform float bassIntensity;
     uniform float midIntensity;
     uniform float trebleIntensity;
     uniform float overallIntensity;
+    attribute float size;
+    attribute vec3 velocity;
+    attribute float offset;
     varying float vOpacity;
+    varying vec3 vPosition;
 
     void main() {
-      vec3 pos = position + velocity * (time + offset);
-      
-      // ปรับความสูงตามความถี่ต่างๆ
-      pos.y *= bassIntensity * 0.5 + midIntensity * 0.3 + trebleIntensity * 0.2;
-      pos.y -= 2.0 * (time + offset) * (time + offset) * overallIntensity;
+    vec3 pos = position + velocity * (time + offset);
+    
+    // Add turbulence
+    float turbulence = sin(pos.x * 10.0 + time) * cos(pos.z * 10.0 + time) * 0.03;
+    
+    pos.y *= bassIntensity * 0.5 + midIntensity * 0.3 + trebleIntensity * 0.2;
+    pos.y += turbulence * overallIntensity;
+    pos.y -= 2.0 * (time + offset) * (time + offset) * overallIntensity;
 
-      pos.x += sin(time * 2.0 + offset) * 0.1 * midIntensity;
-      pos.z += cos(time * 2.0 + offset) * 0.1 * trebleIntensity;
+    pos.x += sin(time * 2.0 + offset) * 0.1 * midIntensity;
+    pos.z += cos(time * 2.0 + offset) * 0.1 * trebleIntensity;
 
-      vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-      gl_PointSize = size * (300.0 / -mvPosition.z) * overallIntensity;
-      gl_Position = projectionMatrix * mvPosition;
+    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = size * (300.0 / -mvPosition.z) * overallIntensity;
+    gl_Position = projectionMatrix * mvPosition;
 
-      float lifetime = 2.0;
-      vOpacity = 1.0 - (time + offset) / lifetime;
-      vOpacity = clamp(vOpacity, 0.0, 1.0);
+    float lifetime = 2.0;
+    vOpacity = smoothstep(0.0, 0.2, 1.0 - (time + offset) / lifetime);
+    vPosition = pos;
     }
+
 `
 
 // Fragment shader for water particles
 const fragmentShader = `
   uniform vec3 color;
-  varying float vOpacity;
+    varying float vOpacity;
+    varying vec3 vPosition;
 
-  void main() {
+    void main() {
     vec2 center = gl_PointCoord - 0.5;
     float dist = length(center);
     float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
 
-    gl_FragColor = vec4(color, alpha);
-  }
+    // Add color variation based on height
+    vec3 particleColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1);
+    
+    gl_FragColor = vec4(particleColor, alpha);
+    }
 `
 
 const PARTICLE_COUNT = 15000
@@ -143,6 +153,62 @@ const WaterParticles = ({ position, audioData }) => {
   )
 }
 
+const AudioResponsiveLight = ({ audioData }) => {
+    const light = useRef()
+    
+    useFrame(() => {
+      if (audioData && light.current) {
+        const intensity = 0.5 + audioData[3] / 255 * 1.5 // ใช้ overall intensity
+        light.current.intensity = intensity
+      }
+    })
+  
+    return <pointLight ref={light} position={[0, 5, 0]} color="#00ffff" />
+  }
+
+  
+const Lighting = ({ audioData }) => {
+    const pointLightRef = useRef()
+  
+    useFrame(() => {
+      if (audioData && pointLightRef.current) {
+        const intensity = 0.5 + audioData[3] / 255 * 1.5 // ใช้ overall intensity
+        pointLightRef.current.intensity = intensity
+      }
+    })
+  
+    return (
+      <>
+        <ambientLight intensity={0.3} />
+        <directionalLight
+          position={[5, 10, 5]}
+          intensity={0.5}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+        />
+        <SpotLight
+          position={[0, 10, 0]}
+          angle={Math.PI / 6}
+          penumbra={0.2}
+          intensity={1}
+          castShadow
+          shadow-mapSize={[1024, 1024]}
+          color="#ffffff"
+        />
+        <pointLight
+          ref={pointLightRef}
+          position={[0, 5, 0]}
+          intensity={0.5}
+          distance={10}
+          decay={2}
+          color="#00ffff"
+        />
+      </>
+    )
+  }
+
+
 // Component สำหรับสร้างน้ำพุ
 const Fountain = ({ position, audioData }) => {
     return (
@@ -189,6 +255,8 @@ export default function RealisticFountains({ audioData }) {
   
     return (
       <>
+      <AudioResponsiveLight audioData={audioData} />
+        <Lighting audioData={audioData} />
         <OrbitControls />
   
         {/* แสงแวดล้อมทั่วไป ให้แสงสว่างกับทุกวัตถุในฉาก */}
@@ -217,6 +285,10 @@ export default function RealisticFountains({ audioData }) {
         <Ground />
         <Fountain position={[0, 0, 0]} audioData={audioData} />
         <GardenElements />
+        <EffectComposer>
+        <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.9} height={300} />
+        <DepthOfField focusDistance={0} focalLength={0.02} bokehScale={2} height={480} />
+        </EffectComposer>
       </>
     )
   }

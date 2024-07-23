@@ -3,6 +3,9 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 const SONGS = [
   { name: "Song 1", path: "/music/spa1.mp3" },
   { name: "Song 2", path: "/music/science-documentary-169621.mp3" },
+  { name: "Song 3", path: "/music/funny-running-129223.mp3" },
+
+  
   
   // เพิ่มเพลงอื่นๆ ตามต้องการ
 ];
@@ -74,7 +77,7 @@ const AudioManager = ({ onAudioData }) => {
     lastAudioDataRef.current = smoothedData;
     return smoothedData;
   };
-  
+
   useEffect(() => {
     audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
     analyserRef.current = audioContextRef.current.createAnalyser();

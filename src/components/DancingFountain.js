@@ -7,27 +7,34 @@ import GardenElements from './GardenElements'  // Import the new component
 
 // Vertex shader for water particles
 const vertexShader = `
-  attribute float size;
-  attribute vec3 velocity;
-  attribute float offset;
-  uniform float time;
-  varying float vOpacity;
+    attribute float size;
+    attribute vec3 velocity;
+    attribute float offset;
+    uniform float time;
+    uniform float bassIntensity;
+    uniform float midIntensity;
+    uniform float trebleIntensity;
+    uniform float overallIntensity;
+    varying float vOpacity;
 
-  void main() {
-    vec3 pos = position + velocity * (time + offset);
-    pos.y -= 2.0 * (time + offset) * (time + offset);
+    void main() {
+      vec3 pos = position + velocity * (time + offset);
+      
+      // ปรับความสูงตามความถี่ต่างๆ
+      pos.y *= bassIntensity * 0.5 + midIntensity * 0.3 + trebleIntensity * 0.2;
+      pos.y -= 2.0 * (time + offset) * (time + offset) * overallIntensity;
 
-    pos.x += sin(time * 2.0 + offset) * 0.1;
-    pos.z += cos(time * 2.0 + offset) * 0.1;
+      pos.x += sin(time * 2.0 + offset) * 0.1 * midIntensity;
+      pos.z += cos(time * 2.0 + offset) * 0.1 * trebleIntensity;
 
-    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-    gl_PointSize = size * (300.0 / -mvPosition.z);
-    gl_Position = projectionMatrix * mvPosition;
+      vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = size * (300.0 / -mvPosition.z) * overallIntensity;
+      gl_Position = projectionMatrix * mvPosition;
 
-    float lifetime = 2.0;
-    vOpacity = 1.0 - (time + offset) / lifetime;
-    vOpacity = clamp(vOpacity, 0.0, 1.0);
-  }
+      float lifetime = 2.0;
+      vOpacity = 1.0 - (time + offset) / lifetime;
+      vOpacity = clamp(vOpacity, 0.0, 1.0);
+    }
 `
 
 // Fragment shader for water particles
@@ -47,8 +54,8 @@ const fragmentShader = `
 const PARTICLE_COUNT = 15000
 
 // Component for creating water particles
-const WaterParticles = ({ position }) => {
-  const [positions, velocities, sizes, offsets] = useMemo(() => {
+const WaterParticles = ({ position, audioData }) => {
+    const [positions, velocities, sizes, offsets] = useMemo(() => {
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const velocities = new Float32Array(PARTICLE_COUNT * 3)
     const sizes = new Float32Array(PARTICLE_COUNT)
@@ -77,12 +84,23 @@ const WaterParticles = ({ position }) => {
   const particles = useRef()
   const uniforms = useMemo(() => ({
     time: { value: 0 },
-    color: { value: new THREE.Color(0x00aaff) }
+    color: { value: new THREE.Color(0x00aaff) },
+    bassIntensity: { value: 1.0 },
+    midIntensity: { value: 1.0 },
+    trebleIntensity: { value: 1.0 },
+    overallIntensity: { value: 1.0 }
   }), [])
 
   useFrame((state) => {
     const { clock } = state
     uniforms.time.value = clock.getElapsedTime() % 2
+    
+    if (audioData) {
+        uniforms.bassIntensity.value = 1 + audioData[0] / 255 * 2;
+        uniforms.midIntensity.value = 1 + audioData[1] / 255 * 2;
+        uniforms.trebleIntensity.value = 1 + audioData[2] / 255 * 2;
+        uniforms.overallIntensity.value = 1 + audioData[3] / 255 * 2;
+      }
   })
 
   return (
@@ -126,7 +144,7 @@ const WaterParticles = ({ position }) => {
 }
 
 // Component สำหรับสร้างน้ำพุ
-const Fountain = ({ position }) => {
+const Fountain = ({ position, audioData }) => {
     return (
       <group position={position}>
         {/* ทรงกระบอกที่เป็นฐานน้ำพุ */}
@@ -138,14 +156,14 @@ const Fountain = ({ position }) => {
         >
           <meshStandardMaterial color="gray" />
         </Cylinder>
-        <WaterParticles position={[0, 0.5, 0]} />
+        <WaterParticles position={[0, 0.5, 0]} audioData={audioData} />
       </group>
     )
   }
   
  
 // Component หลักสำหรับฉาก Dancing Fountain
-export default function RealisticFountains() {
+export default function RealisticFountains({ audioData }) {
     const { scene, camera, gl } = useThree()
     
     useEffect(() => {
@@ -197,7 +215,7 @@ export default function RealisticFountains() {
         />
   
         <Ground />
-        <Fountain position={[0, 0, 0]} />
+        <Fountain position={[0, 0, 0]} audioData={audioData} />
         <GardenElements />
       </>
     )

@@ -20,46 +20,61 @@ const vertexShader = `
     attribute float offset;
     varying float vOpacity;
     varying vec3 vPosition;
+    varying vec3 vNormal;
 
-    void main() {
-    vec3 pos = position + velocity * (time + offset);
-    
-    // Add turbulence
-    float turbulence = sin(pos.x * 10.0 + time) * cos(pos.z * 10.0 + time) * 0.03;
-    
-    pos.y *= bassIntensity * 0.5 + midIntensity * 0.3 + trebleIntensity * 0.2;
-    pos.y += turbulence * overallIntensity;
-    pos.y -= 2.0 * (time + offset) * (time + offset) * overallIntensity;
-
-    pos.x += sin(time * 2.0 + offset) * 0.1 * midIntensity;
-    pos.z += cos(time * 2.0 + offset) * 0.1 * trebleIntensity;
-
-    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-    gl_PointSize = size * (300.0 / -mvPosition.z) * overallIntensity;
-    gl_Position = projectionMatrix * mvPosition;
-
-    float lifetime = 2.0;
-    vOpacity = smoothstep(0.0, 0.2, 1.0 - (time + offset) / lifetime);
-    vPosition = pos;
+    // Simple noise function
+    float noise(vec3 p) {
+        return fract(sin(dot(p, vec3(12.9898, 78.233, 45.5432))) * 43758.5453);
     }
 
+    void main() {
+        vec3 pos = position + velocity * (time + offset);
+        
+        // Add some noise to the position
+        float noiseValue = noise(pos * 0.1 + time * 0.1);
+        pos += vec3(noiseValue, noiseValue, noiseValue) * 0.1;
+
+        // Apply audio reactivity
+        pos.y *= bassIntensity * 0.5 + midIntensity * 0.3 + trebleIntensity * 0.2;
+        pos.y -= 2.0 * (time + offset) * (time + offset) * overallIntensity;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_PointSize = size * (300.0 / -mvPosition.z) * overallIntensity;
+        gl_Position = projectionMatrix * mvPosition;
+
+        float lifetime = 2.0;
+        vOpacity = smoothstep(0.0, 0.2, 1.0 - (time + offset) / lifetime);
+        vPosition = pos;
+        
+        // Calculate normal (this is a very simple approximation)
+        vNormal = normalize(pos - position);
+    }
 `
 
-// Fragment shader for water particles
+// ปรับปรุง Fragment shader
 const fragmentShader = `
-  uniform vec3 color;
+    uniform vec3 color;
     varying float vOpacity;
     varying vec3 vPosition;
+    varying vec3 vNormal;
 
     void main() {
-    vec2 center = gl_PointCoord - 0.5;
-    float dist = length(center);
-    float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
+        vec2 center = gl_PointCoord - 0.5;
+        float dist = length(center);
+        float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
 
-    // Add color variation based on height
-    vec3 particleColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1);
-    
-    gl_FragColor = vec4(particleColor, alpha);
+        // Simple Fresnel effect
+        vec3 viewDir = normalize(cameraPosition - vPosition);
+        float fresnel = pow(1.0 - dot(viewDir, vNormal), 3.0);
+
+        // Add some color variation based on height and fresnel
+        vec3 waterColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1 + fresnel * 0.5);
+        
+        // Add a simple highlight
+        float highlight = pow(max(dot(viewDir, reflect(-viewDir, vNormal)), 0.0), 32.0);
+        waterColor += vec3(1.0) * highlight * 0.5;
+
+        gl_FragColor = vec4(waterColor, alpha);
     }
 `
 

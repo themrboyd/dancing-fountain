@@ -3,9 +3,9 @@ import { useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, Cylinder, SpotLight } from '@react-three/drei'
 import * as THREE from 'three'
 import Ground from './Ground'  // Import Ground component
-import GardenElements from './GardenElements'  // Import the new component
+
 import { EffectComposer, Bloom, DepthOfField, SMAA, ToneMapping } from '@react-three/postprocessing'
-import { BlendFunction } from 'postprocessing'
+
 import NightSky from './NightSky'
 
 // Vertex shader for water particles
@@ -257,12 +257,10 @@ export default function RealisticFountains({ audioData }) {
     const { scene, camera, gl } = useThree()
     
     useEffect(() => {
-      // ตั้งค่าสีพื้นหลังของฉาก
-      scene.background = new THREE.Color(0x000000)
-
-      // ตั้งค่าตำแหน่งกล้องเริ่มต้น
-      camera.position.set(0, 10, 20)  // เปลี่ยนจาก (0, 5, 10) เป็น (0, 10, 20)
-        camera.lookAt(0, 0, 0)
+       // ตั้งค่าฉากและกล้อง
+       scene.background = new THREE.Color(0x000000)
+       camera.position.set(0, 15, 25)  // ปรับตำแหน่งกล้องให้มองเห็นน้ำพุทั้งหมด
+       camera.lookAt(0, 0, 0)
   
       // เปิดใช้งานเงาสำหรับ renderer
       gl.shadowMap.enabled = true
@@ -277,6 +275,14 @@ export default function RealisticFountains({ audioData }) {
       })
     }, [scene, camera, gl])
   
+    // กำหนดตำแหน่งของน้ำพุ 5 อัน
+    const fountainPositions = [
+        [0, 0, 0],       // ตรงกลาง
+        [-4, 0, -4],     // ซ้ายบน
+        [4, 0, -4],      // ขวาบน
+        [-4, 0, 4],      // ซ้ายล่าง
+        [4, 0, 4]        // ขวาล่าง
+    ]
     return (
         <>
         <NightSky />
@@ -289,32 +295,37 @@ export default function RealisticFountains({ audioData }) {
            maxPolarAngle={Math.PI / 2}  // จำกัดมุมในแนวดิ่งเพื่อป้องกันการมองทะลุพื้น
           />
           <Ground />
-          <Fountain position={[0, 0, 0]} audioData={audioData} />
-          <GardenElements />
-          
-          <EffectComposer multisampling={8}>
-            <Bloom 
-            intensity={0.6} 
-            luminanceThreshold={0.2} 
-            luminanceSmoothing={0.9} 
-            height={300} 
-            />
-            <DepthOfField 
-            focusDistance={0.01} 
-            focalLength={0.2} 
-            bokehScale={3} 
-            height={480} 
-            />
-            <SMAA />
-            <ToneMapping
-            adaptive={true}
-            averageLuminance={0.01}
-            minLuminance={0.001}
-            maxLuminance={1}
-            middleGrey={0.4}
-            exposure={1.2}
-            />
-        </EffectComposer>
+          {/* สร้างน้ำพุ 5 อัน */}
+          {fountainPositions.map((position, index) => (
+                <Fountain 
+                    key={index} 
+                    position={position} 
+                    audioData={audioData} 
+                />
+            ))}
+           <EffectComposer multisampling={8}>
+                <Bloom 
+                    intensity={0.6} 
+                    luminanceThreshold={0.2} 
+                    luminanceSmoothing={0.9} 
+                    height={300} 
+                />
+                <DepthOfField 
+                    focusDistance={0.01} 
+                    focalLength={0.2} 
+                    bokehScale={3} 
+                    height={480} 
+                />
+                <SMAA />
+                <ToneMapping
+                    adaptive={true}
+                    averageLuminance={0.01}
+                    minLuminance={0.001}
+                    maxLuminance={1}
+                    middleGrey={0.4}
+                    exposure={1.2}
+                />
+            </EffectComposer>
         </>
       )
   }

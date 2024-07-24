@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react'
+import React, { useEffect, useRef, useMemo,useState } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, Cylinder, SpotLight } from '@react-three/drei'
 import * as THREE from 'three'
@@ -7,83 +7,91 @@ import Ground from './Ground'  // Import Ground component
 import { EffectComposer, Bloom, DepthOfField, SMAA, ToneMapping } from '@react-three/postprocessing'
 
 import NightSky from './NightSky'
-import MistParticles from './MistParticles'
+//import MistParticles from './MistParticles'
+
+// เพิ่มฟังก์ชันสำหรับสุ่มสี
+const getRandomColor = () => {
+    return new THREE.Color(Math.random(), Math.random(), Math.random());
+  };
 
 // Vertex shader for water particles
 const vertexShader = `
     uniform float time;
-    uniform float bassIntensity;
-    uniform float lowMidIntensity;
-    uniform float highMidIntensity;
-    uniform float trebleIntensity;
-    attribute float size;
-    attribute vec3 velocity;
-    attribute float offset;
-    varying float vOpacity;
-    varying vec3 vPosition;
-    varying vec3 vNormal;
+uniform float bassIntensity;
+uniform float lowMidIntensity;
+uniform float highMidIntensity;
+uniform float trebleIntensity;
+attribute float size;
+attribute vec3 velocity;
+attribute float offset;
+varying float vOpacity;
+varying vec3 vPosition;
+varying vec3 vNormal;
 
-    // เพิ่มฟังก์ชัน Perlin noise (ตัวอย่างอย่างง่าย)
-    float noise(vec3 p) {
-        return fract(sin(dot(p, vec3(12.9898, 78.233, 45.5432))) * 43758.5453);
-    }
+// Simple Perlin noise function
+float noise(vec3 p) {
+    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.5432))) * 43758.5453);
+}
 
-    void main() {
-        vec3 pos = position + velocity * (time + offset);
-        
-        // เพิ่มการรบกวนแบบ Perlin noise
-        float noiseValue = noise(pos * 0.1 + time * 0.1);
-        
-        // ปรับปรุงการคำนวณตำแหน่งโดยใช้ความถี่ต่างๆ
-        pos.y *= bassIntensity * 0.4 + lowMidIntensity * 0.3 + highMidIntensity * 0.2 + trebleIntensity * 0.1;
-        pos.y += noiseValue * (bassIntensity + lowMidIntensity) * 0.5;
-        pos.y -= 2.0 * (time + offset) * (time + offset);
+void main() {
+    vec3 pos = position + velocity * (time + offset);
+    
+    // Add Perlin noise for more natural movement
+    float noiseValue = noise(pos * 0.1 + time * 0.1);
+    
+    // Adjust position based on audio frequencies
+    pos.y *= bassIntensity * 0.4 + lowMidIntensity * 0.3 + highMidIntensity * 0.2 + trebleIntensity * 0.1;
+    pos.y += noiseValue * (bassIntensity + lowMidIntensity) * 0.5;
+    pos.y -= 2.0 * (time + offset) * (time + offset);
 
-        // เพิ่มการเคลื่อนไหวในแนวนอนตามความถี่
-        pos.x += sin(time * 2.0 + offset) * 0.1 * lowMidIntensity;
-        pos.z += cos(time * 2.0 + offset) * 0.1 * highMidIntensity;
+    // Add horizontal movement based on frequencies
+    pos.x += sin(time * 2.0 + offset) * 0.1 * lowMidIntensity;
+    pos.z += cos(time * 2.0 + offset) * 0.1 * highMidIntensity;
 
-        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = size * (300.0 / -mvPosition.z) * (bassIntensity + trebleIntensity) * 0.5;
-        gl_Position = projectionMatrix * mvPosition;
+    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = size * (300.0 / -mvPosition.z) * (bassIntensity + trebleIntensity) * 0.5;
+    gl_Position = projectionMatrix * mvPosition;
 
-        float lifetime = 2.0;
-        vOpacity = smoothstep(0.0, 0.2, 1.0 - (time + offset) / lifetime);
-        vPosition = pos;
-        vNormal = normalize(pos - position);
-    }
+    float lifetime = 2.0;
+    vOpacity = smoothstep(0.0, 0.2, 1.0 - (time + offset) / lifetime);
+    vPosition = pos;
+    vNormal = normalize(pos - position);
+}
 `
 
 // ปรับปรุง Fragment shader
 const fragmentShader = `
     uniform vec3 color;
-    uniform float trebleIntensity;
-    varying float vOpacity;
-    varying vec3 vPosition;
-    varying vec3 vNormal;
+uniform float trebleIntensity;
+varying float vOpacity;
+varying vec3 vPosition;
+varying vec3 vNormal;
 
-    void main() {
-        vec2 center = gl_PointCoord - 0.5;
-        float dist = length(center);
-        float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
+void main() {
+    vec2 center = gl_PointCoord - 0.5;
+    float dist = length(center);
+    float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
 
-        vec3 viewDir = normalize(cameraPosition - vPosition);
-        float fresnel = pow(1.0 - dot(viewDir, vNormal), 3.0);
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    
+    // Calculate Fresnel effect
+    float fresnel = pow(1.0 - dot(viewDir, vNormal), 3.0);
 
-        // ปรับสีตามความถี่สูง
-        vec3 waterColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1 + fresnel * 0.5 + trebleIntensity * 0.3);
-        
-        float highlight = pow(max(dot(viewDir, reflect(-viewDir, vNormal)), 0.0), 32.0);
-        waterColor += vec3(1.0) * highlight * 0.5 * (1.0 + trebleIntensity);
+    // Adjust water color based on height, Fresnel, and treble intensity
+    vec3 waterColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1 + fresnel * 0.5 + trebleIntensity * 0.3);
+    
+    // Add specular highlight
+    float highlight = pow(max(dot(viewDir, reflect(-viewDir, vNormal)), 0.0), 32.0);
+    waterColor += vec3(1.0) * highlight * 0.5 * (1.0 + trebleIntensity);
 
-        gl_FragColor = vec4(waterColor, alpha);
-    }
+    gl_FragColor = vec4(waterColor, alpha);
+}
 `
 
-const PARTICLE_COUNT = 15000
+const PARTICLE_COUNT = 10000
 
 // Component for creating water particles
-const WaterParticles = ({ position, audioData }) => {
+const WaterParticles = ({ position, audioData, color }) => {
     const [positions, velocities, sizes, offsets] = useMemo(() => {
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const velocities = new Float32Array(PARTICLE_COUNT * 3)
@@ -91,20 +99,26 @@ const WaterParticles = ({ position, audioData }) => {
     const offsets = new Float32Array(PARTICLE_COUNT)
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const i3 = i * 3
-      const radius = Math.random() * 0.5
-      const angle = Math.random() * Math.PI * 2
-      positions[i3] = Math.cos(angle) * radius
-      positions[i3 + 1] = 0
-      positions[i3 + 2] = Math.sin(angle) * radius
+      const i3 = i * 3;
+      // ใช้การกระจายแบบ Gaussian เพื่อให้อนุภาคกระจุกตัวตรงกลางมากขึ้น
+      const r = Math.sqrt(-2 * Math.log(Math.random()));
+      const theta = 2 * Math.PI * Math.random();
+      const radius = r * 0.1; // ปรับขนาดรัศมี
+      
+      positions[i3] = Math.cos(theta) * radius;
+      positions[i3 + 1] = 0;
+      positions[i3 + 2] = Math.sin(theta) * radius;
 
-      const velocity = 2 + Math.random() * 2
-      velocities[i3] = (Math.random() - 0.5) * 0.5
-      velocities[i3 + 1] = velocity
-      velocities[i3 + 2] = (Math.random() - 0.5) * 0.5
+      // ปรับความเร็วให้มีความหลากหลายมากขึ้น
+      const velocity = 2 + Math.random() * 3;
+      const angle = Math.random() * Math.PI * 2;
+      velocities[i3] = Math.cos(angle) * 0.2;
+      velocities[i3 + 1] = velocity;
+      velocities[i3 + 2] = Math.sin(angle) * 0.2;
 
-      sizes[i] = 0.1 + Math.random() * 0.3
-      offsets[i] = Math.random() * 2
+      // ปรับขนาดอนุภาคให้มีความหลากหลายมากขึ้น
+      sizes[i] = 0.05 + Math.random() * 0.15;
+      offsets[i] = Math.random() * 2;
     }
 
     return [positions, velocities, sizes, offsets]
@@ -113,12 +127,12 @@ const WaterParticles = ({ position, audioData }) => {
   const particles = useRef()
   const uniforms = useMemo(() => ({
     time: { value: 0 },
-    color: { value: new THREE.Color(0x00aaff) },
+    color: { value: color || new THREE.Color(0x00aaff) }, // ใช้สีที่ส่งเข้ามาหรือสีเริ่มต้น
     bassIntensity: { value: 1.0 },
     lowMidIntensity: { value: 1.0 },
     highMidIntensity: { value: 1.0 },
     trebleIntensity: { value: 1.0 }
-  }), [])
+  }), [color])
 
   useFrame((state) => {
     const { clock } = state
@@ -129,7 +143,16 @@ const WaterParticles = ({ position, audioData }) => {
         uniforms.lowMidIntensity.value = 1 + audioData[1] / 255 * 2;
         uniforms.highMidIntensity.value = 1 + audioData[2] / 255 * 2;
         uniforms.trebleIntensity.value = 1 + audioData[3] / 255 * 2;
+
+        // ปรับสีตามข้อมูลเสียง
+        const hue = (clock.getElapsedTime() * 0.1 + audioData[0] / 255 * 0.3) % 1;  // เพิ่มจาก 0.05 และ 0.1 เป็น 0.1 และ 0.3
+        const saturation = 0.4 + audioData[1] / 255 * 0.6;  // เปลี่ยนจาก 0.5 + ... * 0.5 เป็น 0.4 + ... * 0.6
+        const lightness = 0.3 + audioData[2] / 255 * 0.5;  // เปลี่ยนจาก 0.5 + ... * 0.3 เป็น 0.3 + ... * 0.5
+        uniforms.color.value.setHSL(hue, saturation, lightness);
       }
+    // เปลี่ยนสีอย่างช้าๆ ตามเวลา
+    const hue = (clock.getElapsedTime() * 0.05) % 1;
+    uniforms.color.value.setHSL(hue, 0.5, 0.5);
   })
 
   return (
@@ -231,6 +254,8 @@ const AudioResponsiveLight = ({ audioData }) => {
 
 // Component สำหรับสร้างน้ำพุ
 const Fountain = ({ position, audioData }) => {
+    const [initialColor] = useState(() => new THREE.Color(Math.random(), Math.random(), Math.random()));
+
     return (
       <group position={position}>
         {/* ทรงกระบอกที่เป็นฐานน้ำพุ */}
@@ -242,7 +267,8 @@ const Fountain = ({ position, audioData }) => {
         >
           <meshStandardMaterial color="gray" />
         </Cylinder>
-        <WaterParticles position={[0, 0.5, 0]} audioData={audioData} />
+        <WaterParticles position={[0, 0.5, 0]} audioData={audioData} initialColor={initialColor} />
+    
       </group>
     )
   }
@@ -302,7 +328,7 @@ export default function RealisticFountains({ audioData }) {
     ]
     return (
         <>
-        <MistParticles count={2000} color="#a0e0ff" />
+        {/* <MistParticles count={2000} color="#a0e0ff" /> */}
         <NightSky />
         <NightLighting audioData={audioData} />
         <CameraControl initialPosition={[0, 10, 20]} />

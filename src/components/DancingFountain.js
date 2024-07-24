@@ -12,9 +12,9 @@ import NightSky from './NightSky'
 const vertexShader = `
     uniform float time;
     uniform float bassIntensity;
-    uniform float midIntensity;
+    uniform float lowMidIntensity;
+    uniform float highMidIntensity;
     uniform float trebleIntensity;
-    uniform float overallIntensity;
     attribute float size;
     attribute vec3 velocity;
     attribute float offset;
@@ -22,7 +22,7 @@ const vertexShader = `
     varying vec3 vPosition;
     varying vec3 vNormal;
 
-    // Simple noise function
+    // เพิ่มฟังก์ชัน Perlin noise (ตัวอย่างอย่างง่าย)
     float noise(vec3 p) {
         return fract(sin(dot(p, vec3(12.9898, 78.233, 45.5432))) * 43758.5453);
     }
@@ -30,23 +30,25 @@ const vertexShader = `
     void main() {
         vec3 pos = position + velocity * (time + offset);
         
-        // Add some noise to the position
+        // เพิ่มการรบกวนแบบ Perlin noise
         float noiseValue = noise(pos * 0.1 + time * 0.1);
-        pos += vec3(noiseValue, noiseValue, noiseValue) * 0.1;
+        
+        // ปรับปรุงการคำนวณตำแหน่งโดยใช้ความถี่ต่างๆ
+        pos.y *= bassIntensity * 0.4 + lowMidIntensity * 0.3 + highMidIntensity * 0.2 + trebleIntensity * 0.1;
+        pos.y += noiseValue * (bassIntensity + lowMidIntensity) * 0.5;
+        pos.y -= 2.0 * (time + offset) * (time + offset);
 
-        // Apply audio reactivity
-        pos.y *= bassIntensity * 0.5 + midIntensity * 0.3 + trebleIntensity * 0.2;
-        pos.y -= 2.0 * (time + offset) * (time + offset) * overallIntensity;
+        // เพิ่มการเคลื่อนไหวในแนวนอนตามความถี่
+        pos.x += sin(time * 2.0 + offset) * 0.1 * lowMidIntensity;
+        pos.z += cos(time * 2.0 + offset) * 0.1 * highMidIntensity;
 
         vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = size * (300.0 / -mvPosition.z) * overallIntensity;
+        gl_PointSize = size * (300.0 / -mvPosition.z) * (bassIntensity + trebleIntensity) * 0.5;
         gl_Position = projectionMatrix * mvPosition;
 
         float lifetime = 2.0;
         vOpacity = smoothstep(0.0, 0.2, 1.0 - (time + offset) / lifetime);
         vPosition = pos;
-        
-        // Calculate normal (this is a very simple approximation)
         vNormal = normalize(pos - position);
     }
 `
@@ -54,6 +56,7 @@ const vertexShader = `
 // ปรับปรุง Fragment shader
 const fragmentShader = `
     uniform vec3 color;
+    uniform float trebleIntensity;
     varying float vOpacity;
     varying vec3 vPosition;
     varying vec3 vNormal;
@@ -63,16 +66,14 @@ const fragmentShader = `
         float dist = length(center);
         float alpha = smoothstep(0.5, 0.4, dist) * vOpacity;
 
-        // Simple Fresnel effect
         vec3 viewDir = normalize(cameraPosition - vPosition);
         float fresnel = pow(1.0 - dot(viewDir, vNormal), 3.0);
 
-        // Add some color variation based on height and fresnel
-        vec3 waterColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1 + fresnel * 0.5);
+        // ปรับสีตามความถี่สูง
+        vec3 waterColor = mix(color, vec3(0.8, 0.9, 1.0), vPosition.y * 0.1 + fresnel * 0.5 + trebleIntensity * 0.3);
         
-        // Add a simple highlight
         float highlight = pow(max(dot(viewDir, reflect(-viewDir, vNormal)), 0.0), 32.0);
-        waterColor += vec3(1.0) * highlight * 0.5;
+        waterColor += vec3(1.0) * highlight * 0.5 * (1.0 + trebleIntensity);
 
         gl_FragColor = vec4(waterColor, alpha);
     }
@@ -113,9 +114,9 @@ const WaterParticles = ({ position, audioData }) => {
     time: { value: 0 },
     color: { value: new THREE.Color(0x00aaff) },
     bassIntensity: { value: 1.0 },
-    midIntensity: { value: 1.0 },
-    trebleIntensity: { value: 1.0 },
-    overallIntensity: { value: 1.0 }
+    lowMidIntensity: { value: 1.0 },
+    highMidIntensity: { value: 1.0 },
+    trebleIntensity: { value: 1.0 }
   }), [])
 
   useFrame((state) => {
@@ -124,9 +125,9 @@ const WaterParticles = ({ position, audioData }) => {
     
     if (audioData) {
         uniforms.bassIntensity.value = 1 + audioData[0] / 255 * 2;
-        uniforms.midIntensity.value = 1 + audioData[1] / 255 * 2;
-        uniforms.trebleIntensity.value = 1 + audioData[2] / 255 * 2;
-        uniforms.overallIntensity.value = 1 + audioData[3] / 255 * 2;
+        uniforms.lowMidIntensity.value = 1 + audioData[1] / 255 * 2;
+        uniforms.highMidIntensity.value = 1 + audioData[2] / 255 * 2;
+        uniforms.trebleIntensity.value = 1 + audioData[3] / 255 * 2;
       }
   })
 

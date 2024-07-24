@@ -13,20 +13,8 @@ const SONGS = [
 
   // เพิ่มเพลงอื่นๆ ตามต้องการ
 ];
-//test
-// ฟังก์ชัน throttle เพื่อจำกัดความถี่ในการเรียก callback
-function throttle(callback, limit) {
-  let waiting = false;
-  return function () {
-    if (!waiting) {
-      callback.apply(this, arguments);
-      waiting = true;
-      setTimeout(function () {
-        waiting = false;
-      }, limit);
-    }
-  }
-}
+
+
 
 const AudioManager = ({ onAudioData }) => {
   const audioContextRef = useRef(null);
@@ -95,17 +83,17 @@ const AudioManager = ({ onAudioData }) => {
         const dataArray = new Uint8Array(bufferLength);
         analyserRef.current.getByteFrequencyData(dataArray);
   
-        // วิเคราะห์ย่านความถี่ต่างๆ
-        const bassAvg = average(dataArray.slice(0, 10));
-        const midAvg = average(dataArray.slice(10, 100));
-        const trebleAvg = average(dataArray.slice(100, 200));
-        const overallAvg = average(dataArray);
+        // แบ่งความถี่เป็น 4 ช่วงอย่างละเอียดขึ้น
+      const bassAvg = average(dataArray.slice(0, 15));  // 0-220 Hz
+      const lowMidAvg = average(dataArray.slice(15, 50));  // 220-900 Hz
+      const highMidAvg = average(dataArray.slice(50, 100));  // 900-2500 Hz
+      const trebleAvg = average(dataArray.slice(100, 200));  // 2500+ Hz
   
-        // ทำให้การเปลี่ยนแปลงนุ่มนวลขึ้น
-        const smoothedData = smoothData([bassAvg, midAvg, trebleAvg, overallAvg]);
-  
-        // ส่งข้อมูลที่วิเคราะห์แล้วไปยัง DancingFountain
-        onAudioDataRef.current(smoothedData);
+       // ทำให้การเปลี่ยนแปลงนุ่มนวลขึ้น
+      const smoothedData = smoothData([bassAvg, lowMidAvg, highMidAvg, trebleAvg]);
+
+      // ส่งข้อมูลที่วิเคราะห์แล้วไปยัง DancingFountain
+      onAudioDataRef.current(smoothedData);
       }
     animationFrameRef.current = requestAnimationFrame(updateAudioData);
   }, []);
@@ -113,9 +101,9 @@ const AudioManager = ({ onAudioData }) => {
   // ฟังก์ชันสำหรับคำนวณค่าเฉลี่ย
   const average = (array) => array.reduce((a, b) => a + b) / array.length;
 
-  // ฟังก์ชันสำหรับทำให้การเปลี่ยนแปลงนุ่มนวล
+  // ปรับปรุงฟังก์ชัน smoothData ให้มีการตอบสนองที่ดีขึ้น
   const smoothData = (newData) => {
-    const smoothFactor = 0.8;
+    const smoothFactor = 0.7;  // ปรับค่านี้เพื่อควบคุมความนุ่มนวลของการเปลี่ยนแปลง (0-1)
     const smoothedData = new Float32Array(4);
     for (let i = 0; i < 4; i++) {
       smoothedData[i] = smoothFactor * lastAudioDataRef.current[i] + (1 - smoothFactor) * newData[i];
@@ -123,6 +111,7 @@ const AudioManager = ({ onAudioData }) => {
     lastAudioDataRef.current = smoothedData;
     return smoothedData;
   };
+
 
   useEffect(() => {
     audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();

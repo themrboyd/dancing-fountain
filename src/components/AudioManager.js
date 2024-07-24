@@ -13,7 +13,7 @@ const SONGS = [
 
   // เพิ่มเพลงอื่นๆ ตามต้องการ
 ];
-
+//test
 // ฟังก์ชัน throttle เพื่อจำกัดความถี่ในการเรียก callback
 function throttle(callback, limit) {
   let waiting = false;

@@ -7,6 +7,7 @@ import Ground from './Ground'  // Import Ground component
 import { EffectComposer, Bloom, DepthOfField, SMAA, ToneMapping } from '@react-three/postprocessing'
 
 import NightSky from './NightSky'
+import MistParticles from './MistParticles'
 
 // Vertex shader for water particles
 const vertexShader = `
@@ -301,6 +302,7 @@ export default function RealisticFountains({ audioData }) {
     ]
     return (
         <>
+        <MistParticles count={2000} color="#a0e0ff" />
         <NightSky />
         <NightLighting audioData={audioData} />
         <CameraControl initialPosition={[0, 10, 20]} />

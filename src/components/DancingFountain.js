@@ -4,7 +4,9 @@ import { OrbitControls, Cylinder, SpotLight } from '@react-three/drei'
 import * as THREE from 'three'
 import Ground from './Ground'  // Import Ground component
 import GardenElements from './GardenElements'  // Import the new component
-import { EffectComposer, Bloom, DepthOfField } from '@react-three/postprocessing'
+import { EffectComposer, Bloom, DepthOfField, SMAA, ToneMapping } from '@react-three/postprocessing'
+import { BlendFunction } from 'postprocessing'
+import NightSky from './NightSky'
 
 // Vertex shader for water particles
 const vertexShader = `
@@ -166,48 +168,49 @@ const AudioResponsiveLight = ({ audioData }) => {
     return <pointLight ref={light} position={[0, 5, 0]} color="#00ffff" />
   }
 
-  
-const Lighting = ({ audioData }) => {
-    const pointLightRef = useRef()
+  const NightLighting = ({ audioData }) => {
+    const spotLightRef = useRef();
   
     useFrame(() => {
-      if (audioData && pointLightRef.current) {
-        const intensity = 0.5 + audioData[3] / 255 * 1.5 // ใช้ overall intensity
-        pointLightRef.current.intensity = intensity
+      if (audioData && spotLightRef.current) {
+        // ปรับความเข้มของ SpotLight ตาม audioData
+        const intensity = 0.5 + audioData[3] / 255 * 1.5;
+        spotLightRef.current.intensity = intensity;
       }
-    })
+    });
   
     return (
       <>
-        <ambientLight intensity={0.3} />
-        <directionalLight
-          position={[5, 10, 5]}
-          intensity={0.5}
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-        />
+        {/* ใช้ ambientLight เพียงเล็กน้อยเพื่อให้เห็นรายละเอียดของฉาก */}
+        <ambientLight intensity={1.2} color="#b6cff7" />
+        
+        {/* SpotLight หลักสำหรับส่องน้ำพุ */}
         <SpotLight
+          ref={spotLightRef}
           position={[0, 10, 0]}
           angle={Math.PI / 6}
           penumbra={0.2}
           intensity={1}
           castShadow
           shadow-mapSize={[1024, 1024]}
-          color="#ffffff"
+          color="#00ffff" // สีฟ้าอมเขียวเพื่อให้เข้ากับบรรยากาศกลางคืน
+          distance={20} // จำกัดระยะของแสงเพื่อให้เกิดความรู้สึกเป็นจุดสนใจ
+          visible={false}
         />
-        <pointLight
-          ref={pointLightRef}
-          position={[0, 5, 0]}
-          intensity={0.5}
-          distance={10}
-          decay={2}
-          color="#00ffff"
-        />
-      </>
-    )
-  }
 
+         {/* เพิ่ม directionalLight เพื่อจำลองแสงจันทร์ */}
+        <directionalLight
+            position={[-10, 10, -10]}
+            intensity={0.1}
+            color="#b6cff7"
+        />
+        
+        {/* เพิ่มไฟประดับรอบน้ำพุ */}
+        <pointLight position={[2, 0.5, 2]} intensity={0.2} color="#ff9900" distance={5} />
+        <pointLight position={[-2, 0.5, -2]} intensity={0.2} color="#ff9900" distance={5} />
+      </>
+    );
+  };
 
 // Component สำหรับสร้างน้ำพุ
 const Fountain = ({ position, audioData }) => {
@@ -227,6 +230,27 @@ const Fountain = ({ position, audioData }) => {
     )
   }
   
+  const CameraControl = ({ initialPosition = [0, 10, 20] }) => {
+    const { camera } = useThree()
+    const controlsRef = useRef()
+  
+    useFrame(() => {
+      if (controlsRef.current) {
+        controlsRef.current.update()
+      }
+    })
+  
+    return (
+      <OrbitControls
+        ref={controlsRef}
+        args={[camera]}
+        enableZoom={true}
+        minDistance={5}
+        maxDistance={50}
+        maxPolarAngle={Math.PI / 2}
+      />
+    )
+  }
  
 // Component หลักสำหรับฉาก Dancing Fountain
 export default function RealisticFountains({ audioData }) {
@@ -234,11 +258,11 @@ export default function RealisticFountains({ audioData }) {
     
     useEffect(() => {
       // ตั้งค่าสีพื้นหลังของฉาก
-      scene.background = new THREE.Color(0x87CEEB)
-      
+      scene.background = new THREE.Color(0x000000)
+
       // ตั้งค่าตำแหน่งกล้องเริ่มต้น
-      camera.position.set(0, 5, 10)
-      camera.lookAt(0, 0, 0)
+      camera.position.set(0, 10, 20)  // เปลี่ยนจาก (0, 5, 10) เป็น (0, 10, 20)
+        camera.lookAt(0, 0, 0)
   
       // เปิดใช้งานเงาสำหรับ renderer
       gl.shadowMap.enabled = true
@@ -254,41 +278,43 @@ export default function RealisticFountains({ audioData }) {
     }, [scene, camera, gl])
   
     return (
-      <>
-      <AudioResponsiveLight audioData={audioData} />
-        <Lighting audioData={audioData} />
-        <OrbitControls />
-  
-        {/* แสงแวดล้อมทั่วไป ให้แสงสว่างกับทุกวัตถุในฉาก */}
-        <ambientLight intensity={0.3} />
-  
-        {/* แสงหลักจากด้านบน */}
-        <directionalLight
-          position={[5, 10, 5]}
-          intensity={0.5}
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-        />
-  
-        {/* SpotLight เพื่อเน้นแสงที่น้ำพุ */}
-        <SpotLight
-          position={[0, 10, 0]}
-          angle={Math.PI / 6}
-          penumbra={0.2}
-          intensity={1}
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-          color="#ffffff"
-        />
-  
-        <Ground />
-        <Fountain position={[0, 0, 0]} audioData={audioData} />
-        <GardenElements />
-        <EffectComposer>
-        <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.9} height={300} />
-        <DepthOfField focusDistance={0} focalLength={0.02} bokehScale={2} height={480} />
+        <>
+        <NightSky />
+        <NightLighting audioData={audioData} />
+        <CameraControl initialPosition={[0, 10, 20]} />
+          <AudioResponsiveLight audioData={audioData} />
+          <OrbitControls
+           minDistance={5}  // กำหนดระยะใกล้สุดที่สามารถ zoom เข้าได้
+           maxDistance={50}  // กำหนดระยะไกลสุดที่สามารถ zoom ออกได้
+           maxPolarAngle={Math.PI / 2}  // จำกัดมุมในแนวดิ่งเพื่อป้องกันการมองทะลุพื้น
+          />
+          <Ground />
+          <Fountain position={[0, 0, 0]} audioData={audioData} />
+          <GardenElements />
+          
+          <EffectComposer multisampling={8}>
+            <Bloom 
+            intensity={0.6} 
+            luminanceThreshold={0.2} 
+            luminanceSmoothing={0.9} 
+            height={300} 
+            />
+            <DepthOfField 
+            focusDistance={0.01} 
+            focalLength={0.2} 
+            bokehScale={3} 
+            height={480} 
+            />
+            <SMAA />
+            <ToneMapping
+            adaptive={true}
+            averageLuminance={0.01}
+            minLuminance={0.001}
+            maxLuminance={1}
+            middleGrey={0.4}
+            exposure={1.2}
+            />
         </EffectComposer>
-      </>
-    )
+        </>
+      )
   }

@@ -23,8 +23,7 @@ const Ground = () => {
       rotation-x={-Math.PI / 2}
       position={[0, -0.5, 0]}
       ref={meshRef}
-      receiveShadow  // เพิ่มการรับเงา
-
+      receiveShadow
     >
       <meshStandardMaterial 
         map={grassTexture}

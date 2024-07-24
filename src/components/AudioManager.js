@@ -4,6 +4,8 @@ const SONGS = [
   { name: "Song 1", path: "/music/spa1.mp3" },
   { name: "Song 2", path: "/music/science-documentary-169621.mp3" },
   { name: "Song 3", path: "/music/funny-running-129223.mp3" },
+  { name: "Song 4", path: "/music/mozart-piano-sonata-11-3-played-by-brass-ensemble-7635.mp3" },
+  { name: "Song 5", path: "/music/fur-elise-beethoven-216331.mp3" },
 
   
   

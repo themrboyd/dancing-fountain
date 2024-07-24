@@ -20,9 +20,7 @@ const createTexture = (color1, color2, size = 256) => {
 }
 
 const Tree = ({ position }) => {
-  // สร้าง texture สำหรับต้นไม้ (สีน้ำตาลและสีเขียวเข้ม)
   const treeTexture = useMemo(() => createTexture('#8B4513', '#006400'), [])
-  
   return (
     <group position={position}>
       <Box args={[0.5, 4, 0.5]} position={[0, 2, 0]} castShadow receiveShadow>

@@ -6,9 +6,11 @@ const SONGS = [
   { name: "Song 3", path: "/music/funny-running-129223.mp3" },
   { name: "Song 4", path: "/music/mozart-piano-sonata-11-3-played-by-brass-ensemble-7635.mp3" },
   { name: "Song 5", path: "/music/fur-elise-beethoven-216331.mp3" },
+  { name: "Song 6", path: "/music/big-jason-slap-house-version-background-music-for-video-vlog-52-sec-223904.mp3" },
+  { name: "Song 7", path: "/music/glossy-168156.mp3" },
+  { name: "Song 8", path: "/music/perfect-beauty-191271.mp3" },
 
-  
-  
+
   // เพิ่มเพลงอื่นๆ ตามต้องการ
 ];
 
@@ -39,6 +41,48 @@ const AudioManager = ({ onAudioData }) => {
   const lowPassRef = useRef(null);
   const highPassRef = useRef(null);
   const lastAudioDataRef = useRef(new Float32Array(4));
+
+  const styles = {
+    container: {
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: '10px',
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      borderRadius: '5px',
+      backdropFilter: 'blur(5px)',
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+      position: 'absolute',
+      top: '10px',
+      left: '10px',
+      zIndex: 1000,
+    },
+    select: {
+      padding: '5px',
+      fontSize: '14px',
+      borderRadius: '3px',
+      border: '1px solid #ccc',
+      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+      marginRight: '5px',
+    },
+    fileInput: {
+      fontSize: '14px',
+      marginRight: '5px',
+    },
+    button: {
+      padding: '5px 10px',
+      fontSize: '14px',
+      borderRadius: '3px',
+      border: 'none',
+      backgroundColor: '#4CAF50',
+      color: 'white',
+      cursor: 'pointer',
+      transition: 'background-color 0.3s',
+    },
+    buttonHover: {
+      backgroundColor: '#45a049',
+    },
+  };
 
   // อัปเดต ref เมื่อ prop เปลี่ยน
   useEffect(() => {
@@ -150,21 +194,34 @@ const AudioManager = ({ onAudioData }) => {
   }, [isPlaying]);
 
   return (
-    <div>
+    <div style={styles.container}>
       <select 
+        style={styles.select}
         onChange={(e) => {
           setCurrentSong(e.target.value);
           loadPredefinedAudio(e.target.value);
         }} 
         value={currentSong || ""}
       >
-        <option value="">Select a song</option>
+        <option value="">Select song</option>
         {SONGS.map((song, index) => (
           <option key={index} value={song.path}>{song.name}</option>
         ))}
       </select>
-      <input type="file" accept="audio/*" onChange={(e) => loadAudio(e.target.files[0])} />
-      <button onClick={togglePlayback}>{isPlaying ? 'Pause' : 'Play'}</button>
+      <input 
+        type="file" 
+        accept="audio/*" 
+        onChange={(e) => loadAudio(e.target.files[0])} 
+        style={styles.fileInput}
+      />
+      <button 
+        onClick={togglePlayback} 
+        style={styles.button}
+        onMouseEnter={(e) => e.target.style.backgroundColor = styles.buttonHover.backgroundColor}
+        onMouseLeave={(e) => e.target.style.backgroundColor = styles.button.backgroundColor}
+      >
+        {isPlaying ? '⏸' : '▶'}
+      </button>
     </div>
   );
 };

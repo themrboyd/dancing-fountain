@@ -5,14 +5,9 @@ import * as THREE from 'three'
 import Ground from './Ground'  // Import Ground component
 
 import { EffectComposer, Bloom, DepthOfField, SMAA, ToneMapping } from '@react-three/postprocessing'
-
 import NightSky from './NightSky'
-//import MistParticles from './MistParticles'
+import { BasicFountain, DomeFountain, SpinningFountain, WaveFountain, RandomFountain } from './FountainTypes'
 
-// เพิ่มฟังก์ชันสำหรับสุ่มสี
-const getRandomColor = () => {
-    return new THREE.Color(Math.random(), Math.random(), Math.random());
-  };
 
 // Vertex shader for water particles
 const vertexShader = `
@@ -88,10 +83,10 @@ void main() {
 }
 `
 
-const PARTICLE_COUNT = 10000
+const PARTICLE_COUNT = 16000
 
 // Component for creating water particles
-const WaterParticles = ({ position, audioData, color }) => {
+const WaterParticles = ({ position, audioData, color,fountainType }) => {
     const [positions, velocities, sizes, offsets] = useMemo(() => {
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const velocities = new Float32Array(PARTICLE_COUNT * 3)
@@ -134,6 +129,21 @@ const WaterParticles = ({ position, audioData, color }) => {
     trebleIntensity: { value: 1.0 }
   }), [color])
 
+  const fountainInstance = useMemo(() => {
+    switch (fountainType) {
+      case 'dome':
+        return new DomeFountain();
+      case 'spinning':
+        return new SpinningFountain();
+      case 'wave':
+        return new WaveFountain();
+      case 'random':
+        return new RandomFountain();
+      default:
+        return new BasicFountain();
+    }
+  }, [fountainType]);
+
   useFrame((state) => {
     const { clock } = state
     uniforms.time.value = clock.getElapsedTime() % 2
@@ -150,6 +160,25 @@ const WaterParticles = ({ position, audioData, color }) => {
         const lightness = 0.3 + audioData[2] / 255 * 0.5;  // เปลี่ยนจาก 0.5 + ... * 0.3 เป็น 0.3 + ... * 0.5
         uniforms.color.value.setHSL(hue, saturation, lightness);
       }
+
+      // อัปเดตตำแหน่งของอนุภาคตามรูปแบบน้ำพุ
+    const positions = particles.current.geometry.attributes.position.array;
+    const velocities = particles.current.geometry.attributes.velocity.array;
+    const offsets = particles.current.geometry.attributes.offset.array;
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const i3 = i * 3;
+      const time = (clock.getElapsedTime() + offsets[i]) % 2;
+      const initialPos = new THREE.Vector3(velocities[i3], velocities[i3 + 1], velocities[i3 + 2]);
+      const newPos = fountainInstance.getParticlePosition(time, initialPos);
+      
+      positions[i3] = newPos.x;
+      positions[i3 + 1] = newPos.y;
+      positions[i3 + 2] = newPos.z;
+    }
+
+    particles.current.geometry.attributes.position.needsUpdate = true;
+
     // เปลี่ยนสีอย่างช้าๆ ตามเวลา
     const hue = (clock.getElapsedTime() * 0.05) % 1;
     uniforms.color.value.setHSL(hue, 0.5, 0.5);
@@ -253,7 +282,7 @@ const AudioResponsiveLight = ({ audioData }) => {
   };
 
 // Component สำหรับสร้างน้ำพุ
-const Fountain = ({ position, audioData }) => {
+const Fountain = ({ position, audioData,fountainType }) => {
     const [initialColor] = useState(() => new THREE.Color(Math.random(), Math.random(), Math.random()));
 
     return (
@@ -267,7 +296,12 @@ const Fountain = ({ position, audioData }) => {
         >
           <meshStandardMaterial color="gray" />
         </Cylinder>
-        <WaterParticles position={[0, 0.5, 0]} audioData={audioData} initialColor={initialColor} />
+        <WaterParticles 
+        position={[0, 0.5, 0]} 
+        audioData={audioData} 
+        initialColor={initialColor} 
+        fountainType={fountainType}
+         />
     
       </group>
     )
@@ -296,7 +330,7 @@ const Fountain = ({ position, audioData }) => {
   }
  
 // Component หลักสำหรับฉาก Dancing Fountain
-export default function RealisticFountains({ audioData }) {
+export default function RealisticFountains({ audioData,fountainTypes }) {
     const { scene, camera, gl } = useThree()
     
     useEffect(() => {
@@ -318,14 +352,15 @@ export default function RealisticFountains({ audioData }) {
       })
     }, [scene, camera, gl])
   
-    // กำหนดตำแหน่งของน้ำพุ 5 อัน
+    // กำหนดตำแหน่งและรูปแบบของน้ำพุ
     const fountainPositions = [
-        [0, 0, 0],       // ตรงกลาง
-        [-6, 0, -6],     // ซ้ายบน
-        [6, 0, -6],      // ขวาบน
-        [-6, 0, 6],      // ซ้ายล่าง
-        [6, 0, 6]        // ขวาล่าง
-    ]
+        [0, 0, 0],
+        [-6, 0, -6],
+        [6, 0, -6],
+        [-6, 0, 6],
+        [6, 0, 6]
+      ];
+    
     return (
         <>
         {/* <MistParticles count={2000} color="#a0e0ff" /> */}
@@ -339,12 +374,13 @@ export default function RealisticFountains({ audioData }) {
            maxPolarAngle={Math.PI / 2}  // จำกัดมุมในแนวดิ่งเพื่อป้องกันการมองทะลุพื้น
           />
           <Ground />
-          {/* สร้างน้ำพุ 5 อัน */}
+          
           {fountainPositions.map((position, index) => (
                 <Fountain 
-                    key={index} 
-                    position={position} 
-                    audioData={audioData} 
+                key={index} 
+                position={position} 
+                audioData={audioData} 
+                fountainType={fountainTypes[index]}
                 />
             ))}
            <EffectComposer multisampling={8}>
